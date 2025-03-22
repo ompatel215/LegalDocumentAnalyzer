@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DocumentAnalysis from './pages/DocumentAnalysis';
+import DocumentUpload from './pages/DocumentUpload';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ProtectedRoute from './components/ProtectedRoute';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
 
 // Create a client for react-query
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/upload" element={<DocumentUpload />} />
                 <Route path="/analysis/:documentId" element={<DocumentAnalysis />} />
               </Route>
             </Route>

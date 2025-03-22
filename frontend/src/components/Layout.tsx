@@ -7,15 +7,11 @@ const Layout: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar />
-      
-      <div className="flex">
+      <div className="flex min-h-[calc(100vh-64px)]">
         <Sidebar />
-        
-        <main className="flex-1 p-6">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
-          </div>
-        </main>
+        <div className="flex-1 p-8">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

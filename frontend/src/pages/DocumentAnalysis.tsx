@@ -4,59 +4,72 @@ import { useQuery } from 'react-query';
 import axios from 'axios';
 import {
   DocumentTextIcon,
+  ClockIcon,
   ExclamationTriangleIcon,
-  ClipboardDocumentListIcon,
+  CheckCircleIcon,
+  ChartBarIcon,
+  UserIcon,
   TagIcon,
+  BookOpenIcon,
 } from '@heroicons/react/24/outline';
 
+interface Statistics {
+  word_count: number;
+  sentence_count: number;
+  reading_level: number;
+  reading_time: number;
+}
+
+interface Risk {
+  category: string;
+  severity: string;
+  context: string;
+}
+
+interface Clause {
+  type: string;
+  text: string;
+}
+
+interface Sentiment {
+  polarity: number;
+  subjectivity: number;
+}
+
 interface DocumentAnalysis {
+  statistics: Statistics;
+  summary: string;
+  entities: Record<string, string[]>;
+  key_clauses: Clause[];
+  risks: Risk[];
+  sentiment: Sentiment;
+}
+
+interface DocumentResponse {
   id: string;
   title: string;
-  content: string;
-  summary: string;
-  key_clauses: Array<{
-    type: string;
-    content: string;
-    confidence: number;
-  }>;
-  risk_factors: Array<{
-    type: string;
-    description: string;
-    severity: 'low' | 'medium' | 'high';
-    pattern_matched: string;
-  }>;
-  entities: {
-    organizations: string[];
-    people: string[];
-    dates: string[];
-    money: string[];
-    locations: string[];
-  };
-  metadata: {
-    file_type: string;
-    upload_date: string;
-    last_modified: string;
-    analysis_status: string;
-  };
+  file_type: string;
+  size: number;
+  upload_date: string;
+  last_modified: string;
+  status: string;
+  analysis: DocumentAnalysis;
+  tags: string[];
 }
 
 const DocumentAnalysis: React.FC = () => {
   const { documentId } = useParams<{ documentId: string }>();
-  const { data: analysis, isLoading } = useQuery<DocumentAnalysis>(
-    ['documentAnalysis', documentId],
-    () => axios.get(`/api/v1/documents/${documentId}/analysis`).then((res) => res.data)
+
+  const { data: document, isLoading, error } = useQuery<DocumentResponse>(
+    ['document', documentId],
+    () => axios.get(`/api/v1/documents/${documentId}`).then((res) => res.data),
+    {
+      refetchInterval: (data) => 
+        data?.status === 'processing' || data?.status === 'pending' ? 5000 : false,
+    }
   );
 
-  const getSeverityColor = (severity: 'low' | 'medium' | 'high') => {
-    const colors = {
-      low: 'bg-green-100 text-green-800',
-      medium: 'bg-yellow-100 text-yellow-800',
-      high: 'bg-red-100 text-red-800',
-    };
-    return colors[severity];
-  };
-
-  if (isLoading || !analysis) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
@@ -64,111 +77,214 @@ const DocumentAnalysis: React.FC = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-red-500">Error loading document analysis</div>
+      </div>
+    );
+  }
+
+  if (!document) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">Document not found</div>
+      </div>
+    );
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'high':
+        return 'text-red-600 bg-red-100';
+      case 'medium':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'low':
+        return 'text-green-600 bg-green-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'text-green-600 bg-green-100';
+      case 'processing':
+        return 'text-yellow-600 bg-yellow-100';
+      case 'failed':
+        return 'text-red-600 bg-red-100';
+      default:
+        return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       {/* Document Header */}
-      <div className="md:flex md:items-center md:justify-between mb-8">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
-            {analysis.title}
-          </h2>
-          <div className="mt-1 flex flex-col sm:flex-row sm:flex-wrap sm:mt-0 sm:space-x-6">
-            <div className="mt-2 flex items-center text-sm text-gray-500">
-              <DocumentTextIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-              {analysis.metadata.file_type.toUpperCase()}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <DocumentTextIcon className="h-8 w-8 text-gray-400" />
+            <div className="ml-4">
+              <h1 className="text-2xl font-bold text-gray-900">{document.title}</h1>
+              <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                <span>{document.file_type.toUpperCase()}</span>
+                <span>•</span>
+                <span>{formatFileSize(document.size)}</span>
+                <span>•</span>
+                <span>
+                  Uploaded on {new Date(document.upload_date).toLocaleDateString()}
+                </span>
+              </div>
             </div>
-            <div className="mt-2 flex items-center text-sm text-gray-500">
-              <ClipboardDocumentListIcon className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" />
-              Last modified: {new Date(analysis.metadata.last_modified).toLocaleDateString()}
-            </div>
+          </div>
+          <div className={`px-3 py-1 rounded-full ${getStatusColor(document.status)}`}>
+            {document.status}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Summary Section */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Summary</h3>
-          <p className="text-gray-600">{analysis.summary}</p>
+      {document.status === 'processing' || document.status === 'pending' ? (
+        <div className="bg-white shadow rounded-lg p-8 text-center">
+          <ClockIcon className="mx-auto h-12 w-12 text-yellow-400" />
+          <h3 className="mt-2 text-lg font-medium text-gray-900">Analysis in Progress</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Please wait while we analyze your document. This may take a few minutes.
+          </p>
+          <div className="mt-6">
+            <div className="relative">
+              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-yellow-200">
+                <div className="animate-pulse w-full h-full bg-yellow-500"></div>
+              </div>
+            </div>
+          </div>
         </div>
+      ) : document.status === 'failed' ? (
+        <div className="bg-white shadow rounded-lg p-8 text-center">
+          <ExclamationTriangleIcon className="mx-auto h-12 w-12 text-red-400" />
+          <h3 className="mt-2 text-lg font-medium text-gray-900">Analysis Failed</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            We encountered an error while analyzing your document. Please try uploading it again.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Document Statistics */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Document Statistics</h2>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <DocumentTextIcon className="h-6 w-6 text-gray-400" />
+                  <div className="ml-3">
+                    <div className="text-sm font-medium text-gray-500">Word Count</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {document.analysis.statistics.word_count.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <BookOpenIcon className="h-6 w-6 text-gray-400" />
+                  <div className="ml-3">
+                    <div className="text-sm font-medium text-gray-500">Reading Time</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {Math.ceil(document.analysis.statistics.reading_time)} min
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <ChartBarIcon className="h-6 w-6 text-gray-400" />
+                  <div className="ml-3">
+                    <div className="text-sm font-medium text-gray-500">Reading Level</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      Grade {Math.round(document.analysis.statistics.reading_level)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <TagIcon className="h-6 w-6 text-gray-400" />
+                  <div className="ml-3">
+                    <div className="text-sm font-medium text-gray-500">Sentiment</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {document.analysis.sentiment.polarity > 0 ? 'Positive' : 
+                       document.analysis.sentiment.polarity < 0 ? 'Negative' : 'Neutral'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {/* Key Entities */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Key Entities</h3>
-          <div className="space-y-4">
-            {Object.entries(analysis.entities).map(([type, entities]) => (
-              entities.length > 0 && (
-                <div key={type}>
-                  <h4 className="text-sm font-medium text-gray-700 capitalize mb-2">{type}</h4>
-                  <div className="flex flex-wrap gap-2">
+          {/* Document Summary */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Summary</h2>
+            <p className="text-gray-600 whitespace-pre-line">{document.analysis.summary}</p>
+          </div>
+
+          {/* Key Clauses */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Key Clauses</h2>
+            <div className="space-y-4">
+              {document.analysis.key_clauses.map((clause, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-4">
+                  <div className="font-medium text-gray-900 mb-2">{clause.type}</div>
+                  <div className="text-gray-600">{clause.text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Risks */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Identified Risks</h2>
+            <div className="space-y-4">
+              {document.analysis.risks.map((risk, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-medium text-gray-900">{risk.category}</div>
+                    <div className={`px-2 py-1 rounded-full text-sm ${getSeverityColor(risk.severity)}`}>
+                      {risk.severity}
+                    </div>
+                  </div>
+                  <div className="text-gray-600">{risk.context}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Named Entities */}
+          <div className="bg-white shadow rounded-lg p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Named Entities</h2>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(document.analysis.entities).map(([category, entities]) => (
+                <div key={category} className="bg-gray-50 rounded-lg p-4">
+                  <div className="font-medium text-gray-900 mb-2">{category}</div>
+                  <ul className="space-y-1">
                     {entities.map((entity, index) => (
-                      <span
-                        key={index}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                      >
-                        {entity}
-                      </span>
+                      <li key={index} className="text-gray-600">{entity}</li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
-              )
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-
-        {/* Key Clauses */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Key Clauses</h3>
-          <div className="space-y-4">
-            {analysis.key_clauses.map((clause, index) => (
-              <div key={index} className="border-l-4 border-blue-500 pl-4 py-2">
-                <div className="flex items-center mb-2">
-                  <TagIcon className="h-5 w-5 text-blue-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700 capitalize">
-                    {clause.type.replace('_', ' ')}
-                  </span>
-                  <span className="ml-2 text-xs text-gray-500">
-                    {Math.round(clause.confidence * 100)}% confidence
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm">{clause.content}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Risk Factors */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Risk Factors</h3>
-          <div className="space-y-4">
-            {analysis.risk_factors.map((risk, index) => (
-              <div key={index} className="border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center">
-                    <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500 mr-2" />
-                    <span className="text-sm font-medium text-gray-700 capitalize">
-                      {risk.type.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(
-                      risk.severity
-                    )}`}
-                  >
-                    {risk.severity.toUpperCase()}
-                  </span>
-                </div>
-                <p className="text-gray-600 text-sm">{risk.description}</p>
-                <div className="mt-2">
-                  <span className="text-xs text-gray-500">
-                    Pattern matched: "{risk.pattern_matched}"
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
